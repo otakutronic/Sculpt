@@ -6,11 +6,12 @@ public class UpdateVerticies : MonoBehaviour {
 
 	public float radius = 1.0F;
 	public float force = 5.0F;
-	public bool invert = false;
+
 	private MeshFilter unappliedMesh;
+	private List<Vector3> previousMousePos = new List<Vector3>();
 
 	public enum FallOff { Gauss, Linear, Needle }
-	public FallOff fallOff = FallOff.Gauss;
+	public FallOff fallOff = FallOff.Needle;
 
 	static float LinearFalloff (float distance , float inRadius) {
 		return Mathf.Clamp01(1.0F - distance / inRadius);
@@ -30,21 +31,15 @@ public class UpdateVerticies : MonoBehaviour {
 		float sqrRadius = inRadius * inRadius;
 		float sqrMagnitude, distance, falloff;
 
-		// Calculate averaged normal of all surrounding vertices	
-		var averageNormal = Vector3.zero;
-		for (var i=0;i<vertices.Length;i++) {
-			sqrMagnitude = (vertices[i] - position).sqrMagnitude;
-			// Early out if too far away
-			if (sqrMagnitude > sqrRadius)
-				continue;
-
-			distance = Mathf.Sqrt(sqrMagnitude);
-			falloff = LinearFalloff(distance, inRadius);
-			averageNormal += falloff * normals[i];
+		// Calculate the movement vector	
+		Vector3 movementVect = Vector3.zero;
+		if (previousMousePos.Count > 0) {
+			movementVect = position - previousMousePos[0];
+			movementVect = movementVect.normalized;
+			previousMousePos.RemoveAt (0);
 		}
-		averageNormal = averageNormal.normalized;
-
-		// Deform vertices along averaged normal
+			
+		// Deform vertices 
 		for (int i=0;i<vertices.Length;i++) {
 			sqrMagnitude = (vertices[i] - position).sqrMagnitude;
 			// Early out if too far away
@@ -64,12 +59,13 @@ public class UpdateVerticies : MonoBehaviour {
 				break;
 			}
 
-			vertices[i] += averageNormal * falloff * power;
+			vertices[i] += movementVect * falloff * power;
 		}
 
 		mesh.vertices = vertices;
 		mesh.RecalculateNormals();
 		mesh.RecalculateBounds();
+		previousMousePos.Add(position);
 	}
 
 	void Update () {
@@ -97,7 +93,6 @@ public class UpdateVerticies : MonoBehaviour {
 
 				// Deform mesh
 				var relativePoint = filter.transform.InverseTransformPoint(hit.point);
-				float force = CalculateForce ();
 				DeformMesh(filter.mesh, relativePoint, force * Time.deltaTime, radius);
 			}
 		}
@@ -108,9 +103,5 @@ public class UpdateVerticies : MonoBehaviour {
 			unappliedMesh.GetComponent<MeshFilter>().mesh = unappliedMesh.mesh;
 		}
 		unappliedMesh = null;
-	}
-
-	private float CalculateForce() {
-		return invert ? -force : force;
 	}
 }
